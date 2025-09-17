@@ -1,0 +1,42 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+build/
+out/
+
+# Binaries
+utp_multicast_client
+utp_server
+utp_client/utp_client
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.dSYM/
+*.pdb
+core
+vgcore.*
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.old

@@ -1,0 +1,52 @@
+{
+    "server": {
+        "port": 11501,
+        "interface": "0.0.0.0"
+    },
+    "multicast": {
+        "incremental_feed_a": {
+            "multicast_ip": "224.0.1.100",
+            "port": 5000,
+            "interface_ip": "0.0.0.0",
+            "channel_id": 1,
+            "description": "Incremental Feed A"
+        },
+        "incremental_feed_b": {
+            "multicast_ip": "224.0.1.101", 
+            "port": 5001,
+            "interface_ip": "0.0.0.0",
+            "channel_id": 2,
+            "description": "Incremental Feed B"
+        },
+        "security_definition_feed": {
+            "multicast_ip": "224.0.1.102",
+            "port": 5002,
+            "interface_ip": "0.0.0.0",
+            "channel_id": 3,
+            "description": "Security Definition Feed"
+        }
+    },
+    "instruments": [
+        {
+            "symbol": "EURUSD",
+            "id": 1001,
+            "type": "FX_SPOT",
+            "tick_size": 0.00001,
+            "initial_price": 1.0850
+        },
+        {
+            "symbol": "GBPUSD", 
+            "id": 1002,
+            "type": "FX_SPOT",
+            "tick_size": 0.00001,
+            "initial_price": 1.2650
+        },
+        {
+            "symbol": "USDJPY",
+            "id": 1003, 
+            "type": "FX_SPOT",
+            "tick_size": 0.001,
+            "initial_price": 149.50
+        }
+    ]
+}

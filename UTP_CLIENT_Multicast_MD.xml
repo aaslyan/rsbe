@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns2:messageSchema xmlns:ns2="http://www.fixprotocol.org/ns/simple/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" package="UTP_CLIENT_MKTDATA" id="101" version="1" semanticVersion="FIX5SP2" description="20150408" byteOrder="littleEndian" xsi:schemaLocation="http://www.fixtradingcommunity.org/pg/file/fplpo/read/1196759/simple-binary-encoding-rc2xsd SimpleBinary-RC2.xsd">
+
+    <types>
+        <type name="Char" description="char" primitiveType="char"/>
+        <type name="Int8" description="int8" primitiveType="int8"/>
+        <type name="Int16" description="int16" primitiveType="int16"/>
+        <type name="Int32" description="int32" primitiveType="int32"/>
+        <type name="Int64" description="Int64" primitiveType="int64"/>
+
+        <type name="UInt8" description="UInt8" primitiveType="uint8"/>
+        <type name="UInt16" description="UInt16" primitiveType="uint16"/>
+        <type name="UInt32" description="UInt32" primitiveType="uint32"/>
+        <type name="UInt64" description="UInt64" primitiveType="uint64"/>
+
+        <!-- MD fields !-->
+        <type name="Currency" description="Currency" length="3" primitiveType="char" semanticType="Currency"/>
+        <type name="Symbol" description="Symbol" length="16" primitiveType="char" semanticType="String"/>
+        <type name="SecurityIDSource" description="SecurityIDSource" primitiveType="uint32"/>
+        <type name="MDEntryOriginator" description="MDEntryOriginator" length="16" primitiveType="char" semanticType="String"/>
+        <type name="MDEntrySize" description="leavesQty" primitiveType="int64"/>
+        <type name="MinQty" description="minQty" primitiveType="int64"/>
+        <type name="RGTSMDPS" description="rightmost digits of the price to treat as the fractional part of a pip" primitiveType="uint8"/>
+        <type name="LEFT_DPS" description="maximum number of permitted left decimal places" primitiveType="uint8"/>
+        <type name="RIGHT_DPS" description="maximum number of permitted right decimal places" primitiveType="uint8"/>
+        <type name="CLS" description="Indicates if the instrument is eligible for CLS" primitiveType="uint8"/>
+        <type name="MaxPriceVariation" description="The maximum price variation of an execution from one event to the next" presence="optional" nullValue="18446744073709551615" primitiveType="uint64"/>
+        <type name="TransactTime" description="Start of event processing time in number of nanoseconds since Unix epoch" primitiveType="uint64"/>
+        <type name="RefreshSeqNum" description="incremental refresh reference sequence number" primitiveType="int64"/>
+        <type name="MarketDepth" description="Depth of market for Book Snapshot / Incremental updates" primitiveType="uint8"/>
+        <type name="DepthOfBook" description="The number of the price levels to be displayed in the Book for the instrument" primitiveType="uint8"/>
+        <type name="SecurityID" description="integer Id of symbol" primitiveType="int32"/>
+        <type name="ApplID" description="Application ID" presence="constant" primitiveType="int16">18</type>
+        <type name="RptSeqNum" description="integer Sequence number of the last Market Data Entry for the instrument reflected in the message" primitiveType="int64"/>
+
+        <type name="BasisPoint" description="BasisPoint" presence="optional" nullValue="255" primitiveType="uint8"/>
+        <type name="RatePrecision" description="RatePrecision" primitiveType="uint8"/>
+        <type name="Currency1AmtDecimals" description="Currency1AmtDecimals" presence="optional" nullValue="255" primitiveType="uint8"/>
+        <type name="Currency2AmtDecimals" description="Currency2AmtDecimals" presence="optional" nullValue="255" primitiveType="uint8"/>
+
+        <composite name="PriceNull" description="Price NULL">
+            <type name="mantissa" description="mantissa" presence="optional" nullValue="9223372036854775807" primitiveType="int64"/>
+            <type name="exponent" description="exponent" presence="constant" primitiveType="int8">-9</type>
+        </composite>
+        <composite name="GroupSize" description="Repeating group dimensions" semanticType="NumInGroup">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="numInGroup" primitiveType="uint16"/>
+        </composite>
+
+        <!-- MPMB HEADER !-->
+        <composite name="messageHeader" description="Template Id and length of message root">
+            <type name="blockLength" offset="0" primitiveType="uint16"/>
+            <type name="templateId" offset="2" primitiveType="uint16"/>
+            <type name="schemaId" offset="4" primitiveType="uint16"/>
+            <type name="version" offset="6" primitiveType="uint16"/>
+        </composite>
+
+        <composite name="MonthYearDay" description="Year, Month and Date" semanticType="MonthYear">
+            <type name="year" description="YYYY" presence="optional" nullValue="65535" primitiveType="uint16"/>
+            <type name="month" description="MM" presence="optional" minValue="1" maxValue="12" primitiveType="uint8"/>
+            <type name="day" description="DD" presence="optional" minValue="1" maxValue="31" primitiveType="uint8"/>
+        </composite>
+        <composite name="TimeOfDay" description="Hour, Minute, Second and Millisecond" semanticType="Time">
+            <type name="hour" description="HH" presence="optional" minValue="0" maxValue="23" primitiveType="uint8"/>
+            <type name="minute" description="MM" presence="optional" minValue="0" maxValue="59" primitiveType="uint8"/>
+            <!-- Allow up to 61 for leap seconds -->
+            <type name="second" description="SS" presence="optional" minValue="0" maxValue="61" primitiveType="uint8"/>
+            <type name="millisecond" description="sss" presence="optional" minValue="0" maxValue="999" primitiveType="uint16"/>
+        </composite>
+
+        <enum name="RateTerm" encodingType="UInt8">
+            <validValue name="BASE" description="Base Currency">1</validValue>
+            <validValue name="QUOTED" description="Quoted Currency">2</validValue>
+        </enum>
+        <enum name="AggressorSide" encodingType="UInt8">
+            <validValue name="NONE" description="No Aggressor">0</validValue>
+            <validValue name="BUYSIDE" description="Buy Side">1</validValue>
+            <validValue name="SELLSIDE" description="Sell Side">2</validValue>
+        </enum>
+        <enum name="MDEntryType" encodingType="Char">
+            <validValue name="BID" description="Bid">0</validValue>
+            <validValue name="OFFER" description="Offer">1</validValue>
+            <validValue name="TRADE" description="Trade">2</validValue>
+            <validValue name="OPENING_PRICE" description="Opening Price">4</validValue>
+            <validValue name="SETTLEMENT_PRICE" description="Settlement Price">6</validValue>
+            <validValue name="TRADING_SESSION_HIGH_PRICE" description="Trading Session High Price">7</validValue>
+            <validValue name="TRADING_SESSION_LOW_PRICE" description="Trading Session Low Price">8</validValue>
+            <validValue name="TRADE_VOLUME" description="Trade Volume">B</validValue>
+            <validValue name="OPEN_INTEREST" description="Open Interest">C</validValue>
+            <validValue name="IMPLIED_BID" description="Implied Bid">E</validValue>
+            <validValue name="IMPLIED_OFFER" description="Implied Offer">F</validValue>
+            <validValue name="EMPTY_BOOK" description="Empty Book">J</validValue>
+            <validValue name="SESSION_HIGH_BID" description="Session High Bid">N</validValue>
+            <validValue name="SESSION_LOW_OFFER" description="Session Low Offer">O</validValue>
+            <validValue name="FIXING_PRICE" description="Fixing Price">W</validValue>
+            <validValue name="ELECTRONIC_VOLUME" description="Electronic Volume">e</validValue>
+            <validValue name="THRESHOLD_LIMITS_AND_PRICE_BAND_VARIATION" description="Threshold Limits and Price Band Variation">g</validValue>
+        </enum>
+        
+        <enum name="SecurityUpdateAction" encodingType="Char">
+            <validValue name="ADD" description="New">A</validValue>
+            <validValue name="DELETE" description="Delete">D</validValue>
+            <validValue name="MODIFY" description="Change">M</validValue>
+            <validValue name="NOCHANGE" description="None">N</validValue>
+        </enum>
+
+        <enum name="MDUpdateAction" encodingType="Int8">
+            <validValue name="NEW" description="New">0</validValue>
+            <validValue name="CHANGE" description="Change">1</validValue>
+            <validValue name="DELETE" description="Delete">2</validValue>
+        </enum>
+
+        <enum name="MarketDataType" encodingType="Int8">
+            <validValue name="FXSPOT" description="SPOT">0</validValue>
+            <validValue name="FXNDF" description="NDF">1</validValue>
+            <validValue name="FXFWD" description="OPTION">2</validValue>
+            <validValue name="FXSWAP" description="INVALID">3</validValue>
+            <validValue name="FXNDS" description="INVALID">4</validValue>
+            <validValue name="INVALID" description="INVALID">127</validValue>
+        </enum>
+
+    </types>
+
+<!--################################################################################
+#
+#   HeartBeat message
+#   this message is used to notify MD receipients that ME is up
+#   it is receipients responsibility to implement logic to get the status of
+#   the matching engine
+#
+################################################################################ !-->
+
+    <message name="AdminHeartbeat" id="10" description="AdminHeartbeat" blockLength="0" semanticType="0"/>
+
+<!--################################################################################ 
+#
+#   Security List [Type .y.] 
+#
+################################################################################ !--> 
+
+     <message name="SecurityDefinition" id="18" description="Instrument list and definition" blockLength="106" semanticType="d" sinceVersion="0">
+        <field name="SecurityUpdateAction" id="279" type="SecurityUpdateAction" description="Security update action" offset="0" semanticType="Char"/>
+        <field name="LastUpdateTime" id="779" type="TransactTime" description="Date and Time of the Last Security Definition Add/Modify or Delete for the instrument" offset="1" semanticType="UInt64"/>
+        <field name="ApplID" id="1180" type="ApplID" description="Indicates the channel ID as defined in the XML configuration file" semanticType="Int16"/>
+        <field name="MDEntryOriginator" id="282" type="MDEntryOriginator" description="originator of the market data" offset="9" semanticType="String"/>
+        <field name="Symbol" id="55" type="Symbol" description="Instrument Name or Symbol" offset="25" semanticType="String"/>
+        <field name="SecurityID" id="48" type="SecurityID" description="Instrument ID" offset="41" semanticType="Int32"/>
+        <field name="SecurityIDSource" id="22" type="SecurityIDSource" description="Security ID Source" offset="45" semanticType="String"/>
+        <field name="SecurityType" id="167" type="MarketDataType" description="Indicates type of security" offset="49" semanticType="Int8"/>
+        <field name="SettlDate" id="64" type="MonthYearDay" description="Instrument's Settlement Date always expressed in YYYYMMDD format" offset="50" semanticType="MonthYear"/>
+        <field name="Currency1" id="30375" type="Currency" description="Identifies currency used for price" offset="54" semanticType="Currency"/>
+        <field name="Currency2" id="30376" type="Currency" description="Identifies currency used for price" offset="57" semanticType="Currency"/>
+        <field name="BasisPoint" id="30378" type="BasisPoint" description="Integer value representing the decimal position of one point" offset="60" semanticType="UInt8"/>
+        <field name="RatePrecision" id="30379" type="RatePrecision" description="Integer value representing the highest decimal precision used to show prevailing prices in the currency pair specified by Symbol" offset="61" semanticType="UInt8"/>
+        <field name="RateTerm" id="30380" type="RateTerm" description="ISO Currency code indicating the currency in terms of which the price for the currency pair represented by Symbol " offset="62" semanticType="UInt8"/>
+        <field name="Currency1AmtDecimals" id="30381" type="Currency1AmtDecimals" description="Integer value representing the decimal precision with which the quantity of Currency1 will be measured for executions in the currency pair specified by Symbol" offset="63" semanticType="UInt8"/>
+        <field name="Currency2AmtDecimals" id="30382" type="Currency2AmtDecimals" description="Integer value representing the decimal precision with which the quantity of Currency1 will be measured for executions in the currency pair specified by Symbol" offset="64" semanticType="UInt8"/>
+        <field name="RGTSMDPS" id="30433" type="RGTSMDPS" description="Indicates how many of the rightmost digits of the price to treat as the fractional part of a pip" offset="65" semanticType="UInt8"/>
+        <field name="LEFT_DPS" id="30434" type="LEFT_DPS" description="The maximum number of permitted left decimal places" offset="66" semanticType="UInt8"/>
+        <field name="RIGHT_DPS" id="30435" type="RIGHT_DPS" description="The maximum number of permitted right decimal places" offset="67" semanticType="UInt8"/>
+        <field name="CLS" id="30436" type="CLS" description="Indicates if the instrument is eligible for CLS" offset="68" semanticType="UInt8"/>
+        <field name="MaxPriceVariation" id="1143" type="MaxPriceVariation" description="The maximum price variation of an execution from one event to the next for a given security" offset="69" semanticType="UInt64"/>
+        <field name="SnapshotConflationInterval" id="30437" type="TimeOfDay" description="Conflation interval for broadcasting the instrument’s Snapshot Full Refresh messages" offset="77" semanticType="Time"/>
+        <field name="IncRefreshConflationInterval" id="30438" type="TimeOfDay" description="Conflation interval for broadcasting the instrument’s Incremental messages" offset="82" semanticType="Time"/>
+        <field name="TradesFeedConflationInterval" id="30430" type="TimeOfDay" description="Conflation interval for broadcasting the instrument’s Trade messages" offset="87" semanticType="Time"/>
+        <field name="SecurityDefinitionConflationInterval" id="30431" type="TimeOfDay" description="Conflation interval for broadcasting the instrument’s Security Definition messages" offset="92" semanticType="Time"/>
+        <field name="DepthOfBook" id="30439" type="DepthOfBook" description="the number of the price levels to be displayed in the Book for the instrument" offset="97" semanticType="UInt8"/>
+        <field name="MinTradeVol" id="562" type="MinQty" description="The minimum trading volume for an instrument that must be traded for the price to be used to change the market high/low" offset="98" semanticType="Int64"/>
+    </message>
+
+<!--################################################################################ 
+#
+#   "Full Refresh"
+#
+################################################################################ !--> 
+
+    <message name="MDFullRefresh" id="20" description="MDFullRefresh" blockLength="46" semanticType="W" sinceVersion="0">
+        <field name="LastMsgSeqNumProcessed" id="369" type="RefreshSeqNum" description="incremental refresh reference sequence number" offset="0" semanticType="Int64"/>
+        <field name="SecurityID" id="48" type="SecurityID" description="Instrument ID" offset="8" semanticType="Int32"/>
+        <field name="RptSeq" id="83" type="RptSeqNum" description="Instrument SeqNum" offset="12" semanticType="Int64"/>
+        <field name="TransactTime" id="60" type="TransactTime" description="Start of event processing time in number of nanoseconds since Unix epoch" offset="20" semanticType="UInt64"/>
+        <field name="MDEntryOriginator" id="282" type="MDEntryOriginator" description="originator of the market data" offset="28" semanticType="String"/>
+        <field name="MarketDepth" id="264" type="MarketDepth" description="Depth of market for Book Snapshot / Incremental updates" offset="44" semanticType="UInt8"/>
+        <field name="SecurityType" id="167" type="MarketDataType" description="Indicates type of security" offset="45" semanticType="Int8"/>
+        <group name="NoMDEntries" id="268"  description="Number of entries in Market Data message" blockLength="17" dimensionType="GroupSize">
+            <field name="MDEntryType" id="269" type="MDEntryType" description="Market Data entry type" offset="0" semanticType="Char"/>
+            <field name="MDEntryPx" id="270" type="PriceNull" description="Market Data entry price" offset="1" semanticType="Int64"/>
+            <field name="MDEntrySize" id="271" type="MDEntrySize" description="Market Data entry size" offset="9" semanticType="Int64"/>
+        </group>
+    </message>
+
+<!--################################################################################ 
+#
+#   "Incremental refresh "
+#
+################################################################################ !--> 
+
+    <message name="MDIncrementalRefresh" id="21" description="MDIncrementalRefreshBook" blockLength="36" semanticType="X" sinceVersion="0">
+        <field name="SecurityID" id="48" type="SecurityID" description="Instrument ID" offset="0" semanticType="Int32"/>
+        <field name="RptSeq" id="83" type="RptSeqNum" description="Instrument SeqNum" offset="4" semanticType="Int64"/>
+        <field name="TransactTime" id="60" type="TransactTime" description="Start of event processing time in number of nanoseconds since Unix epoch" offset="12" semanticType="UInt64"/>
+        <field name="MDEntryOriginator" id="282" type="MDEntryOriginator" description="originator of the market data" offset="20" semanticType="String"/>
+        <group name="NoMDEntries" id="268"  description="Number of entries in Market Data message" blockLength="18" dimensionType="GroupSize">
+            <field name="MDUpdateAction" id="279" type="MDUpdateAction" description="Market Data update action" offset="0" semanticType="Int8"/>
+            <field name="MDEntryType" id="269" type="MDEntryType" description="Market Data entry type" offset="1" semanticType="Char"/>
+            <field name="MDEntryPx" id="270" type="PriceNull" description="Market Data entry price" offset="2" semanticType="Int64"/>
+            <field name="MDEntrySize" id="271" type="MDEntrySize" description="Market Data entry size" offset="10" semanticType="Int64"/>
+        </group>
+    </message>
+
+<!--################################################################################ 
+#
+#   Incremental refresh Trades (Type .X.)
+#
+################################################################################ !--> 
+
+    <message name="MDIncrementalRefreshTrades" id="111" blockLength="24" semanticType="X" description="Trade">
+        <field name="SecurityID" id="48" type="SecurityID" description="Instrument ID" offset="0" semanticType="Int32"/>
+        <field name="TradeDate" id="75" type="MonthYearDay" description="Trade Date in YYYYMMDD format" offset="4" semanticType="MonthYear"/>
+        <field name="MDEntryOriginator" id="282" type="MDEntryOriginator" description="originator of the market data" offset="8" semanticType="String"/>
+        <group name="NoMDEntries" id="268"  description="Number of entries in Market Data message" blockLength="29" dimensionType="GroupSize">
+            <field name="MDUpdateAction" id="279" type="MDUpdateAction" description="Market Data update action" presence="constant" valueRef="MDUpdateAction.NEW" semanticType="Int8"/>
+            <field name="MDEntryType" id="269" type="MDEntryType" presence="constant" valueRef="MDEntryType.TRADE" description="Market Data entry type" semanticType="Char"/>
+            <field name="TransactTime" id="60" type="TransactTime" description="Start of event processing time in number of nanoseconds since Unix epoch" offset="0" semanticType="UInt64"/>
+            <field name="SettlDate" id="64" type="MonthYearDay" description="Instrument's Settlement Date always expressed in YYYYMMDD format" offset="8" semanticType="MonthYear"/>
+            <field name="MDEntryPx" id="270" type="PriceNull" description="Market Data entry price" offset="12" semanticType="Int64"/>
+            <field name="MDEntrySize" id="271" type="MDEntrySize" description="Market Data entry size" offset="20" semanticType="Int64"/>
+            <field name="AggressorSide" id="5797" type="AggressorSide" description="Buyside or Sellside" offset="28" semanticType="UInt8"/>
+       </group>
+    </message>
+
+
+</ns2:messageSchema>
+
+
+
