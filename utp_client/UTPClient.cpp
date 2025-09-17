@@ -1,24 +1,24 @@
 #include "UTPClient.h"
+#include <algorithm>
 #include <arpa/inet.h>
+#include <chrono>
 #include <cstring>
+#include <endian.h>
 #include <iomanip>
 #include <iostream>
 #include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <chrono>
-#include <thread>
-#include <algorithm>
 #include <sys/select.h>
-#include <endian.h>
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h>
 
 // Include SBE headers for proper decoding
-#include "../include/utp_sbe/utp_sbe/MessageHeader.h"
 #include "../include/utp_sbe/utp_sbe/AdminHeartbeat.h"
-#include "../include/utp_sbe/utp_sbe/SecurityDefinition.h"
 #include "../include/utp_sbe/utp_sbe/MDFullRefresh.h"
 #include "../include/utp_sbe/utp_sbe/MDIncrementalRefresh.h"
 #include "../include/utp_sbe/utp_sbe/MDIncrementalRefreshTrades.h"
+#include "../include/utp_sbe/utp_sbe/MessageHeader.h"
+#include "../include/utp_sbe/utp_sbe/SecurityDefinition.h"
 
 UTPClient::UTPClient(const std::string& multicast_group, int port)
     : m_multicast_group(multicast_group)
@@ -118,7 +118,7 @@ ssize_t UTPClient::receive_data(uint8_t* buffer, size_t buffer_size)
     }
 
     ssize_t bytes = recvfrom(m_socket, buffer, buffer_size, 0,
-                             (struct sockaddr*)&sender_addr, &sender_len);
+        (struct sockaddr*)&sender_addr, &sender_len);
 
     if (bytes > 0) {
         m_last_received_time = std::chrono::steady_clock::now();
@@ -154,43 +154,43 @@ void UTPClient::process_single_message()
 
 void UTPClient::parse_message(const uint8_t* buffer, size_t size)
 {
-    if (size < 23) {
-        std::cerr << "Message too small for multicast header: " << size << " bytes\n";
+    if (size < 20) {
+        std::cerr << "Message too small for Thomson Reuters packet header: " << size << " bytes\n";
         return;
     }
 
-    std::cout << "\n=== UTP Message Received ===\n";
+    std::cout << "\n=== Thomson Reuters Message Received ===\n";
     std::cout << "Message size: " << size << " bytes\n";
     hex_dump(buffer, std::min(size, size_t(48)));
 
-    // Parse MulticastMessageHeader (23 bytes)
-    parse_multicast_header(buffer);
+    // Parse Binary Packet Header (20 bytes) according to Thomson Reuters spec
+    parse_tr_packet_header(buffer);
 
-    // SBE message starts at offset 23
-    if (size > 23) {
-        std::cout << "\n=== SBE Message (offset 23) ===\n";
-        parse_sbe_message(buffer + 23, size - 23);
+    // SBE message starts at offset 20
+    if (size > 20) {
+        std::cout << "\n=== SBE Message (offset 20) ===\n";
+        parse_sbe_message(buffer + 20, size - 20);
     } else {
         std::cout << "No SBE message payload\n";
     }
 }
 
-void UTPClient::parse_multicast_header(const uint8_t* buffer)
+void UTPClient::parse_tr_packet_header(const uint8_t* buffer)
 {
-    std::cout << "\n--- Multicast Header ---\n";
-    
-    // Extract header fields (in network byte order)
-    uint64_t sequence_number = be64toh(*reinterpret_cast<const uint64_t*>(buffer));
-    uint32_t channel_id = ntohl(*reinterpret_cast<const uint32_t*>(buffer + 8));
-    uint64_t send_time_ns = be64toh(*reinterpret_cast<const uint64_t*>(buffer + 12));
-    uint16_t message_count = ntohs(*reinterpret_cast<const uint16_t*>(buffer + 20));
-    uint8_t flags = buffer[22];
-    
-    std::cout << "Sequence Number: " << sequence_number << std::endl;
-    std::cout << "Channel ID: " << channel_id << std::endl;
-    std::cout << "Send Time (ns): " << send_time_ns << std::endl;
-    std::cout << "Message Count: " << message_count << std::endl;
-    std::cout << "Flags: 0x" << std::hex << static_cast<int>(flags) << std::dec << std::endl;
+    std::cout << "\n--- Thomson Reuters Binary Packet Header ---\n";
+
+    // Parse according to TR specification (Chapter 6.1)
+    uint64_t msg_seq_num = *reinterpret_cast<const uint64_t*>(buffer); // 8 bytes
+    uint64_t sending_time = *reinterpret_cast<const uint64_t*>(buffer + 8); // 8 bytes
+    uint8_t hdr_len = buffer[16]; // 1 byte (should be 20)
+    uint8_t hdr_ver = buffer[17]; // 1 byte (should be 1)
+    uint16_t packet_len = *reinterpret_cast<const uint16_t*>(buffer + 18); // 2 bytes
+
+    std::cout << "MsgSeqNum: " << msg_seq_num << std::endl;
+    std::cout << "SendingTime: " << sending_time << std::endl;
+    std::cout << "HdrLen: " << static_cast<int>(hdr_len) << std::endl;
+    std::cout << "HdrVer: " << static_cast<int>(hdr_ver) << std::endl;
+    std::cout << "PacketLen: " << packet_len << std::endl;
 }
 
 void UTPClient::parse_sbe_message(const uint8_t* buffer, size_t size)
@@ -200,52 +200,51 @@ void UTPClient::parse_sbe_message(const uint8_t* buffer, size_t size)
         return;
     }
 
-    std::cout << "Searching for SBE header in payload...\n";
-    hex_dump(buffer, std::min(size, size_t(64)));
+    std::cout << "Parsing SBE Header (first 8 bytes)...\n";
+    hex_dump(buffer, std::min(size, size_t(32)));
 
-    // Search for valid template IDs in the buffer
-    bool found_header = false;
-    size_t sbe_offset = 0;
-    
-    for (size_t offset = 0; offset <= size - 8; offset += 2) {
-        // Try to read template ID as little-endian uint16
-        uint16_t template_id = *reinterpret_cast<const uint16_t*>(buffer + offset);
-        
-        if (template_id == 1 || template_id == 18 || template_id == 38 || template_id == 39 || template_id == 41) {
-            std::cout << "Found potential template ID " << template_id << " at offset " << offset << std::endl;
-            
-            // Check if there's enough space for a full SBE header
-            if (offset + 8 <= size) {
-                try {
-                    utp_sbe::MessageHeader header;
-                    header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), offset, 0, size);
-                    
-                    std::cout << "SBE Header at offset " << offset << ":\n";
-                    std::cout << "  Template ID: " << header.templateId() << std::endl;
-                    std::cout << "  Schema ID: " << header.schemaId() << std::endl;
-                    std::cout << "  Version: " << header.version() << std::endl;
-                    std::cout << "  Block Length: " << header.blockLength() << std::endl;
-                    
-                    // Validate this looks reasonable
-                    if (header.schemaId() == 1 && header.version() == 0 && header.blockLength() > 0 && header.blockLength() < 1000) {
-                        std::cout << "*** Using SBE message at offset " << offset << " ***\n";
-                        found_header = true;
-                        sbe_offset = offset;
-                        break;
-                    }
-                } catch (const std::exception& e) {
-                    // Continue searching
-                }
-            }
-        }
-    }
+    // Parse SBE Header according to Thomson Reuters spec (Chapter 6.2)
+    uint16_t block_length = *reinterpret_cast<const uint16_t*>(buffer); // offset 0
+    uint16_t template_id = *reinterpret_cast<const uint16_t*>(buffer + 2); // offset 2
+    uint16_t schema_id = *reinterpret_cast<const uint16_t*>(buffer + 4); // offset 4
+    uint16_t version = *reinterpret_cast<const uint16_t*>(buffer + 6); // offset 6
 
-    if (found_header) {
-        // Parse the message at the found offset
-        parse_sbe_message_at_offset(buffer, size, sbe_offset);
-    } else {
-        std::cout << "Could not find valid SBE header. Attempting raw decode...\n";
-        decode_raw_message_content(buffer, size);
+    std::cout << "\n--- SBE Header ---\n";
+    std::cout << "Block Length: " << block_length << std::endl;
+    std::cout << "Template ID: " << template_id << std::endl;
+    std::cout << "Schema ID: " << schema_id << std::endl;
+    std::cout << "Version: " << version << std::endl;
+
+    // Now parse the specific message type
+    std::cout << "\n--- SBE Message Body ---\n";
+    switch (template_id) {
+    case 0: // Heartbeat
+        std::cout << "Heartbeat message\n";
+        break;
+
+    case 1: // Admin Heartbeat
+        std::cout << "Admin Heartbeat message\n";
+        break;
+
+    case 12: // Security Definition (type 'd')
+        std::cout << "Security Definition message\n";
+        parse_security_definition_tr(buffer + 8, size - 8, block_length);
+        break;
+
+    case 13: // Market Data Snapshot Full Refresh (type 'W')
+        std::cout << "Market Data Snapshot Full Refresh message\n";
+        parse_md_full_refresh_tr(buffer + 8, size - 8, block_length);
+        break;
+
+    case 14: // Market Data Incremental Refresh (type 'X')
+        std::cout << "Market Data Incremental Refresh message\n";
+        parse_md_incremental_refresh_tr(buffer + 8, size - 8, block_length);
+        break;
+
+    default:
+        std::cout << "Unknown or unsupported template ID: " << template_id << std::endl;
+        decode_raw_message_content(buffer + 8, size - 8);
+        break;
     }
 }
 
@@ -288,17 +287,17 @@ void UTPClient::parse_sbe_message_at_offset(const uint8_t* buffer, size_t size, 
 void UTPClient::decode_raw_message_content(const uint8_t* buffer, size_t size)
 {
     std::cout << "\n=== Raw Message Content Analysis ===\n";
-    
+
     // Look for potential numeric data that could be prices/sizes
     for (size_t i = 0; i <= size - 8; i += 4) {
         uint32_t val32 = *reinterpret_cast<const uint32_t*>(buffer + i);
         uint64_t val64 = *reinterpret_cast<const uint64_t*>(buffer + i);
-        
+
         // Check for potential security ID (reasonable range)
         if (val32 > 0 && val32 < 100000) {
             std::cout << "Potential Security ID " << val32 << " at offset " << i << std::endl;
         }
-        
+
         // Check for potential price (as fixed point)
         if (val64 > 1000000 && val64 < 1000000000000ULL) {
             double price = static_cast<double>(val64) / 1e9;
@@ -307,7 +306,7 @@ void UTPClient::decode_raw_message_content(const uint8_t* buffer, size_t size)
             }
         }
     }
-    
+
     // Look for ASCII strings (symbols)
     for (size_t i = 0; i < size - 3; i++) {
         if (buffer[i] >= 'A' && buffer[i] <= 'Z') {
@@ -362,36 +361,36 @@ void UTPClient::parse_message_at_offset(const uint8_t* buffer, size_t size, size
 void UTPClient::parse_admin_heartbeat(const uint8_t* buffer, size_t size)
 {
     utp_sbe::AdminHeartbeat heartbeat;
-    heartbeat.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 
-                            0, sizeof(utp_sbe::MessageHeader), 
-                            sizeof(utp_sbe::MessageHeader), size);
-    
+    heartbeat.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)),
+        0, sizeof(utp_sbe::MessageHeader),
+        sizeof(utp_sbe::MessageHeader), size);
+
     std::cout << "AdminHeartbeat received\n";
 }
 
 void UTPClient::parse_security_definition(const uint8_t* buffer, size_t size)
 {
     utp_sbe::SecurityDefinition secDef;
-    secDef.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 
-                         0, sizeof(utp_sbe::MessageHeader), 
-                         sizeof(utp_sbe::MessageHeader), size);
-    
+    secDef.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)),
+        0, sizeof(utp_sbe::MessageHeader),
+        sizeof(utp_sbe::MessageHeader), size);
+
     std::cout << "=== SecurityDefinition ===\n";
     std::cout << "  Security ID: " << secDef.securityID() << std::endl;
-    
+
     // Get symbol
-    char symbol[17] = {0};
-    secDef.getSymbol(symbol, sizeof(symbol)-1);
+    char symbol[17] = { 0 };
+    secDef.getSymbol(symbol, sizeof(symbol) - 1);
     std::cout << "  Symbol: " << symbol << std::endl;
-    
+
     // Get currencies
-    char currency1[4] = {0};
-    char currency2[4] = {0};
-    secDef.getCurrency1(currency1, sizeof(currency1)-1);
-    secDef.getCurrency2(currency2, sizeof(currency2)-1);
+    char currency1[4] = { 0 };
+    char currency2[4] = { 0 };
+    secDef.getCurrency1(currency1, sizeof(currency1) - 1);
+    secDef.getCurrency2(currency2, sizeof(currency2) - 1);
     std::cout << "  Currency1: " << currency1 << std::endl;
     std::cout << "  Currency2: " << currency2 << std::endl;
-    
+
     std::cout << "  Last Update Time: " << secDef.lastUpdateTime() << std::endl;
     std::cout << "  Security Type: " << static_cast<int>(secDef.securityType()) << std::endl;
     std::cout << "  Depth of Book: " << static_cast<int>(secDef.depthOfBook()) << std::endl;
@@ -401,24 +400,24 @@ void UTPClient::parse_security_definition(const uint8_t* buffer, size_t size)
 void UTPClient::parse_md_full_refresh(const uint8_t* buffer, size_t size)
 {
     utp_sbe::MDFullRefresh refresh;
-    refresh.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 
-                          0, sizeof(utp_sbe::MessageHeader), 
-                          sizeof(utp_sbe::MessageHeader), size);
-    
+    refresh.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)),
+        0, sizeof(utp_sbe::MessageHeader),
+        sizeof(utp_sbe::MessageHeader), size);
+
     std::cout << "=== MDFullRefresh ===\n";
     std::cout << "  Security ID: " << refresh.securityID() << std::endl;
     std::cout << "  RptSeq: " << refresh.rptSeq() << std::endl;
     std::cout << "  TransactTime: " << refresh.transactTime() << std::endl;
     std::cout << "  Market Depth: " << static_cast<int>(refresh.marketDepth()) << std::endl;
-    
+
     // Parse MD entries
     auto& entries = refresh.noMDEntries();
     std::cout << "  Number of Entries: " << entries.count() << std::endl;
-    
+
     while (entries.hasNext()) {
         auto& entry = entries.next();
         double price = static_cast<double>(entry.mDEntryPx().mantissa()) / 1e9;
-        
+
         std::cout << "    Entry: Type=" << static_cast<int>(entry.mDEntryType())
                   << " (0=Bid, 1=Offer), Price=" << price
                   << ", Size=" << entry.mDEntrySize() << std::endl;
@@ -428,23 +427,23 @@ void UTPClient::parse_md_full_refresh(const uint8_t* buffer, size_t size)
 void UTPClient::parse_md_incremental_refresh(const uint8_t* buffer, size_t size)
 {
     utp_sbe::MDIncrementalRefresh incremental;
-    incremental.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 
-                              0, sizeof(utp_sbe::MessageHeader), 
-                              sizeof(utp_sbe::MessageHeader), size);
-    
+    incremental.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)),
+        0, sizeof(utp_sbe::MessageHeader),
+        sizeof(utp_sbe::MessageHeader), size);
+
     std::cout << "=== MDIncrementalRefresh ===\n";
     std::cout << "  Security ID: " << incremental.securityID() << std::endl;
     std::cout << "  RptSeq: " << incremental.rptSeq() << std::endl;
     std::cout << "  TransactTime: " << incremental.transactTime() << std::endl;
-    
+
     // Parse MD entries
     auto& entries = incremental.noMDEntries();
     std::cout << "  Number of Entries: " << entries.count() << std::endl;
-    
+
     while (entries.hasNext()) {
         auto& entry = entries.next();
         double price = static_cast<double>(entry.mDEntryPx().mantissa()) / 1e9;
-        
+
         std::cout << "    Entry: Action=" << static_cast<int>(entry.mDUpdateAction())
                   << " (0=New, 1=Change, 2=Delete), Type=" << static_cast<int>(entry.mDEntryType())
                   << " (0=Bid, 1=Offer), Price=" << price
@@ -455,38 +454,168 @@ void UTPClient::parse_md_incremental_refresh(const uint8_t* buffer, size_t size)
 void UTPClient::parse_md_incremental_refresh_trades(const uint8_t* buffer, size_t size)
 {
     utp_sbe::MDIncrementalRefreshTrades trades;
-    trades.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 
-                         0, sizeof(utp_sbe::MessageHeader), 
-                         sizeof(utp_sbe::MessageHeader), size);
-    
+    trades.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(buffer)),
+        0, sizeof(utp_sbe::MessageHeader),
+        sizeof(utp_sbe::MessageHeader), size);
+
     std::cout << "=== MDIncrementalRefreshTrades ===\n";
     std::cout << "  Security ID: " << trades.securityID() << std::endl;
-    
+
     // Parse trade entries
     auto& entries = trades.noMDEntries();
     std::cout << "  Number of Trades: " << entries.count() << std::endl;
-    
+
     while (entries.hasNext()) {
         auto& entry = entries.next();
         double price = static_cast<double>(entry.mDEntryPx().mantissa()) / 1e9;
-        
+
         std::cout << "    Trade: Price=" << price
                   << ", Size=" << entry.mDEntrySize()
                   << ", TransactTime=" << entry.transactTime()
-                  << ", Aggressor=" << static_cast<int>(entry.aggressorSide()) 
+                  << ", Aggressor=" << static_cast<int>(entry.aggressorSide())
                   << " (0=None, 1=Buy, 2=Sell)" << std::endl;
     }
+}
+
+void UTPClient::parse_security_definition_tr(const uint8_t* buffer, size_t size, uint16_t block_length)
+{
+    std::cout << "=== Thomson Reuters SecurityDefinition ===\n";
+
+    if (size < 16) {
+        std::cout << "Message too small for manual parsing: " << size << " bytes\n";
+        return;
+    }
+
+    // Manual parsing based on Thomson Reuters specification
+    size_t pos = 0;
+
+    // Parse basic fields from the beginning
+    if (pos + 4 <= size) {
+        uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
+        std::cout << "  Security ID: " << securityID << std::endl;
+        pos += 4;
+    }
+
+    // Look for printable symbol string
+    for (size_t i = pos; i < std::min(size - 8, pos + 32); i++) {
+        if (buffer[i] >= 'A' && buffer[i] <= 'Z') {
+            std::string symbol;
+            size_t j = i;
+            while (j < size && ((buffer[j] >= 'A' && buffer[j] <= 'Z') || buffer[j] == '/') && symbol.length() < 16) {
+                symbol += static_cast<char>(buffer[j]);
+                j++;
+            }
+            if (symbol.length() >= 3 && symbol.find('/') != std::string::npos) {
+                std::cout << "  Symbol: " << symbol << std::endl;
+                break;
+            }
+        }
+    }
+
+    std::cout << "  Block Length: " << block_length << std::endl;
+    std::cout << "  Message Size: " << size << " bytes" << std::endl;
+}
+
+void UTPClient::parse_md_full_refresh_tr(const uint8_t* buffer, size_t size, uint16_t block_length)
+{
+    std::cout << "=== Thomson Reuters MDFullRefresh ===\n";
+
+    if (size < 12) {
+        std::cout << "Message too small for parsing: " << size << " bytes\n";
+        return;
+    }
+
+    size_t pos = 0;
+
+    // Parse security ID
+    if (pos + 4 <= size) {
+        uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
+        std::cout << "  Security ID: " << securityID << std::endl;
+        pos += 4;
+    }
+
+    // Parse sequence number
+    if (pos + 8 <= size) {
+        uint64_t rptSeq = *reinterpret_cast<const uint64_t*>(buffer + pos);
+        std::cout << "  Report Sequence: " << rptSeq << std::endl;
+        pos += 8;
+    }
+
+    // Look for price/size pairs
+    std::cout << "  Market Data Entries:" << std::endl;
+    size_t entry_count = 0;
+    while (pos + 16 <= size && entry_count < 10) {
+        uint64_t price_raw = *reinterpret_cast<const uint64_t*>(buffer + pos);
+        uint64_t size_val = *reinterpret_cast<const uint64_t*>(buffer + pos + 8);
+
+        if (price_raw > 0 && size_val > 0 && size_val < 1000000000) {
+            double price = static_cast<double>(price_raw) / 1e9;
+            std::cout << "    Entry " << entry_count << ": Price=" << price
+                      << ", Size=" << size_val << std::endl;
+        }
+        pos += 16;
+        entry_count++;
+    }
+
+    std::cout << "  Block Length: " << block_length << std::endl;
+}
+
+void UTPClient::parse_md_incremental_refresh_tr(const uint8_t* buffer, size_t size, uint16_t block_length)
+{
+    std::cout << "=== Thomson Reuters MDIncrementalRefresh ===\n";
+
+    if (size < 12) {
+        std::cout << "Message too small for parsing: " << size << " bytes\n";
+        return;
+    }
+
+    size_t pos = 0;
+
+    // Parse security ID
+    if (pos + 4 <= size) {
+        uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
+        std::cout << "  Security ID: " << securityID << std::endl;
+        pos += 4;
+    }
+
+    // Parse sequence number
+    if (pos + 8 <= size) {
+        uint64_t rptSeq = *reinterpret_cast<const uint64_t*>(buffer + pos);
+        std::cout << "  Report Sequence: " << rptSeq << std::endl;
+        pos += 8;
+    }
+
+    // Look for incremental entries with action codes
+    std::cout << "  Incremental Entries:" << std::endl;
+    size_t entry_count = 0;
+    while (pos + 17 <= size && entry_count < 5) {
+        uint8_t action = buffer[pos];
+        uint64_t price_raw = *reinterpret_cast<const uint64_t*>(buffer + pos + 1);
+        uint64_t size_val = *reinterpret_cast<const uint64_t*>(buffer + pos + 9);
+
+        if (action <= 2 && price_raw > 0) {
+            double price = static_cast<double>(price_raw) / 1e9;
+            const char* action_str = (action == 0) ? "New" : (action == 1) ? "Change"
+                                                                           : "Delete";
+            std::cout << "    Entry " << entry_count << ": Action=" << action_str
+                      << ", Price=" << price << ", Size=" << size_val << std::endl;
+        }
+        pos += 17;
+        entry_count++;
+    }
+
+    std::cout << "  Block Length: " << block_length << std::endl;
 }
 
 void UTPClient::manual_decode_message(const uint8_t* buffer, size_t size)
 {
     std::cout << "\n=== Manual Message Decode ===\n";
-    
+
     if (size < 16) {
         std::cout << "Message too short for manual decode\n";
         return;
     }
-    
+
     // Try to extract useful information from common offsets
     // Look for potential template IDs in the first 20 bytes
     for (size_t i = 0; i < std::min(size - 2, size_t(20)); i += 2) {
@@ -495,7 +624,7 @@ void UTPClient::manual_decode_message(const uint8_t* buffer, size_t size)
             std::cout << "Potential template ID " << val << " at offset " << i << std::endl;
         }
     }
-    
+
     // Look for potential security IDs (4-byte integers)
     for (size_t i = 0; i < std::min(size - 4, size_t(32)); i += 4) {
         uint32_t val = *reinterpret_cast<const uint32_t*>(buffer + i);
@@ -503,7 +632,7 @@ void UTPClient::manual_decode_message(const uint8_t* buffer, size_t size)
             std::cout << "Potential security ID " << val << " at offset " << i << std::endl;
         }
     }
-    
+
     // Look for potential timestamps (8-byte values)
     for (size_t i = 0; i < std::min(size - 8, size_t(40)); i += 8) {
         uint64_t val = *reinterpret_cast<const uint64_t*>(buffer + i);
@@ -511,7 +640,7 @@ void UTPClient::manual_decode_message(const uint8_t* buffer, size_t size)
             std::cout << "Potential timestamp " << val << " at offset " << i << std::endl;
         }
     }
-    
+
     // Look for printable strings (potential symbols)
     for (size_t i = 0; i < size - 4; i++) {
         bool printable = true;
@@ -529,13 +658,13 @@ void UTPClient::manual_decode_message(const uint8_t* buffer, size_t size)
             i += len; // skip ahead
         }
     }
-    
+
     // Try to decode assuming it's a SecurityDefinition (template 18)
     if (size >= 50) {
         std::cout << "\n--- Assuming SecurityDefinition format ---\n";
         decode_security_definition_manual(buffer, size);
     }
-    
+
     // Try to decode assuming it's market data
     if (size >= 30) {
         std::cout << "\n--- Assuming Market Data format ---\n";
@@ -548,45 +677,48 @@ void UTPClient::decode_security_definition_manual(const uint8_t* buffer, size_t 
     // Try different starting positions
     for (size_t start = 0; start <= 16 && start < size - 40; start += 4) {
         std::cout << "\n--- SecurityDef attempt at offset " << start << " ---\n";
-        
+
         size_t pos = start;
-        
+
         // Look for security ID (4 bytes)
         if (pos + 4 <= size) {
             uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
             std::cout << "Security ID: " << securityID << std::endl;
             pos += 4;
         }
-        
+
         // Look for timestamp (8 bytes)
         if (pos + 8 <= size) {
             uint64_t timestamp = *reinterpret_cast<const uint64_t*>(buffer + pos);
             std::cout << "Timestamp: " << timestamp << std::endl;
             pos += 8;
         }
-        
+
         // Look for symbol (try 16 bytes)
         if (pos + 16 <= size) {
-            char symbol[17] = {0};
+            char symbol[17] = { 0 };
             memcpy(symbol, buffer + pos, 16);
             // Clean non-printable chars
             for (int i = 0; i < 16; i++) {
-                if (symbol[i] < 32 || symbol[i] > 126) symbol[i] = '.';
+                if (symbol[i] < 32 || symbol[i] > 126)
+                    symbol[i] = '.';
             }
             std::cout << "Potential symbol: '" << symbol << "'" << std::endl;
             pos += 16;
         }
-        
+
         // Look for currencies (3 bytes each)
         if (pos + 6 <= size) {
-            char currency1[4] = {0};
-            char currency2[4] = {0};
+            char currency1[4] = { 0 };
+            char currency2[4] = { 0 };
             memcpy(currency1, buffer + pos, 3);
             memcpy(currency2, buffer + pos + 3, 3);
             // Clean non-printable chars
             for (int i = 0; i < 3; i++) {
-                if (currency1[i] < 32 || currency1[i] > 126) currency1[i] = '.';
-                if (currency2[i] < 32 || currency2[i] > 126) currency2[i] = '.';
+                if (currency1[i] < 32 || currency1[i] > 126)
+                    currency1[i] = '.';
+                if (currency2[i] < 32 || currency2[i] > 126)
+                    currency2[i] = '.';
             }
             std::cout << "Potential currencies: '" << currency1 << "' / '" << currency2 << "'" << std::endl;
         }
@@ -597,42 +729,43 @@ void UTPClient::decode_market_data_manual(const uint8_t* buffer, size_t size)
 {
     for (size_t start = 0; start <= 16 && start < size - 20; start += 4) {
         std::cout << "\n--- Market Data attempt at offset " << start << " ---\n";
-        
+
         size_t pos = start;
-        
+
         // Look for security ID
         if (pos + 4 <= size) {
             uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
             std::cout << "Security ID: " << securityID << std::endl;
             pos += 4;
         }
-        
+
         // Look for sequence number
         if (pos + 8 <= size) {
             uint64_t rptSeq = *reinterpret_cast<const uint64_t*>(buffer + pos);
             std::cout << "Report Sequence: " << rptSeq << std::endl;
             pos += 8;
         }
-        
+
         // Look for timestamp
         if (pos + 8 <= size) {
             uint64_t timestamp = *reinterpret_cast<const uint64_t*>(buffer + pos);
             std::cout << "Timestamp: " << timestamp << std::endl;
             pos += 8;
         }
-        
+
         // Look for potential price/size pairs
         while (pos + 16 <= size) {
             uint64_t price_raw = *reinterpret_cast<const uint64_t*>(buffer + pos);
             uint64_t size_val = *reinterpret_cast<const uint64_t*>(buffer + pos + 8);
-            
+
             if (price_raw > 0 && size_val > 0 && size_val < 1000000000) {
                 double price = static_cast<double>(price_raw) / 1e9;
                 std::cout << "  Potential Price/Size: " << price << " / " << size_val << std::endl;
             }
             pos += 16;
-            
-            if (pos >= start + 64) break; // Don't go too far
+
+            if (pos >= start + 64)
+                break; // Don't go too far
         }
     }
 }
