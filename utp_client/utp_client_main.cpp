@@ -46,7 +46,7 @@ int main(int argc, char* argv[])
         std::cout << "[CALLBACK] AdminHeartbeat processed\n";
     });
 
-    client.set_security_definition_callback([](const SecurityDefinition& secDef) {
+    client.set_security_def_callback([](const SecurityDefinition& secDef) {
         std::cout << "[CALLBACK] SecurityDefinition processed\n";
     });
 
@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
                   << refresh.mdEntries.size() << " entries\n";
     });
 
-    client.set_incremental_callback([](const MDIncrementalRefresh& incremental) {
+    client.set_incremental_refresh_callback([](const MDIncrementalRefresh& incremental) {
         std::cout << "[CALLBACK] MDIncrementalRefresh processed - "
                   << incremental.mdEntries.size() << " entries\n";
     });
