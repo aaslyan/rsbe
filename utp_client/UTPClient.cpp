@@ -153,45 +153,73 @@ void UTPClient::process_single_message()
 
 void UTPClient::parse_message(const uint8_t* buffer, size_t size)
 {
-    if (size < sizeof(utp_sbe::MessageHeader)) {
-        std::cerr << "Message too small for header: " << size << " bytes\n";
+    if (size < 8) {
+        std::cerr << "Message too small for any header: " << size << " bytes\n";
         return;
     }
 
-    // Decode SBE message header
-    utp_sbe::MessageHeader header;
-    header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 0, 0, size);
+    std::cout << "\n=== UTP Message Received (Raw) ===\n";
+    std::cout << "Message size: " << size << " bytes\n";
+    hex_dump(buffer, std::min(size, size_t(32)));
 
-    std::cout << "\n=== UTP Message Received ===\n";
-    std::cout << "Template ID: " << header.templateId() << std::endl;
-    std::cout << "Schema ID: " << header.schemaId() << std::endl;
-    std::cout << "Version: " << header.version() << std::endl;
-    std::cout << "Block Length: " << header.blockLength() << std::endl;
+    // Try different offsets to find the SBE header
+    for (size_t offset = 0; offset <= 8 && offset < size - 8; offset += 4) {
+        try {
+            utp_sbe::MessageHeader header;
+            header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), offset, 0, size);
+
+            std::cout << "\n--- Trying offset " << offset << " ---\n";
+            std::cout << "Template ID: " << header.templateId() << std::endl;
+            std::cout << "Schema ID: " << header.schemaId() << std::endl;
+            std::cout << "Version: " << header.version() << std::endl;
+            std::cout << "Block Length: " << header.blockLength() << std::endl;
+
+            // Check if this looks like a valid template ID (should be 1, 18, 38, 39, 41)
+            uint16_t templateId = header.templateId();
+            if (templateId == 1 || templateId == 18 || templateId == 38 || templateId == 39 || templateId == 41) {
+                std::cout << "*** Found valid template ID at offset " << offset << " ***\n";
+                parse_message_at_offset(buffer, size, offset);
+                return;
+            }
+        } catch (const std::exception& e) {
+            std::cout << "Failed at offset " << offset << ": " << e.what() << std::endl;
+        }
+    }
+
+    std::cout << "Could not find valid SBE header in message\n";
+}
+
+void UTPClient::parse_message_at_offset(const uint8_t* buffer, size_t size, size_t offset)
+{
+    utp_sbe::MessageHeader header;
+    header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), offset, 0, size);
+
+    std::cout << "\n=== Parsing SBE Message at offset " << offset << " ===\n";
 
     switch (header.templateId()) {
     case 1: // ADMIN_HEARTBEAT
-        parse_admin_heartbeat(buffer, size);
+        parse_admin_heartbeat(buffer + offset, size - offset);
         break;
 
     case 18: // SECURITY_DEFINITION
-        parse_security_definition(buffer, size);
+        parse_security_definition(buffer + offset, size - offset);
         break;
 
     case 39: // MD_FULL_REFRESH
-        parse_md_full_refresh(buffer, size);
+        parse_md_full_refresh(buffer + offset, size - offset);
         break;
 
     case 38: // MD_INCREMENTAL_REFRESH
-        parse_md_incremental_refresh(buffer, size);
+        parse_md_incremental_refresh(buffer + offset, size - offset);
         break;
 
     case 41: // MD_INCREMENTAL_REFRESH_TRADES
-        parse_md_incremental_refresh_trades(buffer, size);
+        parse_md_incremental_refresh_trades(buffer + offset, size - offset);
         break;
 
     default:
         std::cout << "Unknown message type: " << header.templateId() << std::endl;
-        hex_dump(buffer, std::min(size, size_t(64)));
+        hex_dump(buffer + offset, std::min(size - offset, size_t(64)));
         break;
     }
 }

@@ -42,6 +42,7 @@ public:
 private:
     // Message parsing helpers
     void parse_message(const uint8_t* buffer, size_t size);
+    void parse_message_at_offset(const uint8_t* buffer, size_t size, size_t offset);
     void parse_admin_heartbeat(const uint8_t* buffer, size_t size);
     void parse_security_definition(const uint8_t* buffer, size_t size);
     void parse_md_full_refresh(const uint8_t* buffer, size_t size);
