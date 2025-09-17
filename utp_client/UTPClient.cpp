@@ -154,8 +154,8 @@ void UTPClient::process_single_message()
 
 void UTPClient::parse_message(const uint8_t* buffer, size_t size)
 {
-    if (size < 20) {
-        std::cerr << "Message too small for Thomson Reuters packet header: " << size << " bytes\n";
+    if (size < 8) {
+        std::cerr << "Message too small for SBE header: " << size << " bytes\n";
         return;
     }
 
@@ -163,15 +163,40 @@ void UTPClient::parse_message(const uint8_t* buffer, size_t size)
     std::cout << "Message size: " << size << " bytes\n";
     hex_dump(buffer, std::min(size, size_t(48)));
 
-    // Parse Binary Packet Header (20 bytes) according to Thomson Reuters spec
-    parse_tr_packet_header(buffer);
+    // Check if this looks like a multicast header or direct SBE
+    // Look for SBE header pattern in first 32 bytes
+    size_t sbe_offset = 0;
+    bool found_sbe = false;
 
-    // SBE message starts at offset 20
-    if (size > 20) {
-        std::cout << "\n=== SBE Message (offset 20) ===\n";
-        parse_sbe_message(buffer + 20, size - 20);
+    for (size_t offset = 0; offset <= std::min(size_t(32), size - 8); offset += 4) {
+        uint16_t potential_template = le16toh(*reinterpret_cast<const uint16_t*>(buffer + offset + 2));
+
+        // Look for reasonable template IDs (1-50 range for Thomson Reuters)
+        if (potential_template >= 1 && potential_template <= 50) {
+            uint16_t block_length = le16toh(*reinterpret_cast<const uint16_t*>(buffer + offset));
+            uint16_t schema_id = le16toh(*reinterpret_cast<const uint16_t*>(buffer + offset + 4));
+
+            // Validate this looks like a real SBE header
+            if (block_length > 0 && block_length < 1000 && schema_id < 1000) {
+                std::cout << "\nFound SBE header at offset " << offset << std::endl;
+                sbe_offset = offset;
+                found_sbe = true;
+                break;
+            }
+        }
+    }
+
+    if (found_sbe) {
+        if (sbe_offset > 0) {
+            std::cout << "\n--- Multicast Header (offset 0-" << sbe_offset << ") ---\n";
+            parse_tr_packet_header(buffer);
+        }
+
+        std::cout << "\n=== SBE Message (offset " << sbe_offset << ") ===\n";
+        parse_sbe_message(buffer + sbe_offset, size - sbe_offset);
     } else {
-        std::cout << "No SBE message payload\n";
+        std::cout << "\nNo valid SBE header found. Trying manual decode...\n";
+        decode_raw_message_content(buffer, size);
     }
 }
 
@@ -180,11 +205,12 @@ void UTPClient::parse_tr_packet_header(const uint8_t* buffer)
     std::cout << "\n--- Thomson Reuters Binary Packet Header ---\n";
 
     // Parse according to TR specification (Chapter 6.1)
-    uint64_t msg_seq_num = *reinterpret_cast<const uint64_t*>(buffer); // 8 bytes
-    uint64_t sending_time = *reinterpret_cast<const uint64_t*>(buffer + 8); // 8 bytes
+    // Thomson Reuters uses little-endian format
+    uint64_t msg_seq_num = le64toh(*reinterpret_cast<const uint64_t*>(buffer)); // 8 bytes
+    uint64_t sending_time = le64toh(*reinterpret_cast<const uint64_t*>(buffer + 8)); // 8 bytes
     uint8_t hdr_len = buffer[16]; // 1 byte (should be 20)
     uint8_t hdr_ver = buffer[17]; // 1 byte (should be 1)
-    uint16_t packet_len = *reinterpret_cast<const uint16_t*>(buffer + 18); // 2 bytes
+    uint16_t packet_len = le16toh(*reinterpret_cast<const uint16_t*>(buffer + 18)); // 2 bytes
 
     std::cout << "MsgSeqNum: " << msg_seq_num << std::endl;
     std::cout << "SendingTime: " << sending_time << std::endl;
@@ -204,10 +230,11 @@ void UTPClient::parse_sbe_message(const uint8_t* buffer, size_t size)
     hex_dump(buffer, std::min(size, size_t(32)));
 
     // Parse SBE Header according to Thomson Reuters spec (Chapter 6.2)
-    uint16_t block_length = *reinterpret_cast<const uint16_t*>(buffer); // offset 0
-    uint16_t template_id = *reinterpret_cast<const uint16_t*>(buffer + 2); // offset 2
-    uint16_t schema_id = *reinterpret_cast<const uint16_t*>(buffer + 4); // offset 4
-    uint16_t version = *reinterpret_cast<const uint16_t*>(buffer + 6); // offset 6
+    // SBE uses little-endian encoding, so convert from little-endian to host
+    uint16_t block_length = le16toh(*reinterpret_cast<const uint16_t*>(buffer)); // offset 0
+    uint16_t template_id = le16toh(*reinterpret_cast<const uint16_t*>(buffer + 2)); // offset 2
+    uint16_t schema_id = le16toh(*reinterpret_cast<const uint16_t*>(buffer + 4)); // offset 4
+    uint16_t version = le16toh(*reinterpret_cast<const uint16_t*>(buffer + 6)); // offset 6
 
     std::cout << "\n--- SBE Header ---\n";
     std::cout << "Block Length: " << block_length << std::endl;
@@ -290,8 +317,8 @@ void UTPClient::decode_raw_message_content(const uint8_t* buffer, size_t size)
 
     // Look for potential numeric data that could be prices/sizes
     for (size_t i = 0; i <= size - 8; i += 4) {
-        uint32_t val32 = *reinterpret_cast<const uint32_t*>(buffer + i);
-        uint64_t val64 = *reinterpret_cast<const uint64_t*>(buffer + i);
+        uint32_t val32 = le32toh(*reinterpret_cast<const uint32_t*>(buffer + i));
+        uint64_t val64 = le64toh(*reinterpret_cast<const uint64_t*>(buffer + i));
 
         // Check for potential security ID (reasonable range)
         if (val32 > 0 && val32 < 100000) {
@@ -491,7 +518,7 @@ void UTPClient::parse_security_definition_tr(const uint8_t* buffer, size_t size,
 
     // Parse basic fields from the beginning
     if (pos + 4 <= size) {
-        uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
+        uint32_t securityID = le32toh(*reinterpret_cast<const uint32_t*>(buffer + pos));
         std::cout << "  Security ID: " << securityID << std::endl;
         pos += 4;
     }
@@ -529,14 +556,14 @@ void UTPClient::parse_md_full_refresh_tr(const uint8_t* buffer, size_t size, uin
 
     // Parse security ID
     if (pos + 4 <= size) {
-        uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
+        uint32_t securityID = le32toh(*reinterpret_cast<const uint32_t*>(buffer + pos));
         std::cout << "  Security ID: " << securityID << std::endl;
         pos += 4;
     }
 
     // Parse sequence number
     if (pos + 8 <= size) {
-        uint64_t rptSeq = *reinterpret_cast<const uint64_t*>(buffer + pos);
+        uint64_t rptSeq = le64toh(*reinterpret_cast<const uint64_t*>(buffer + pos));
         std::cout << "  Report Sequence: " << rptSeq << std::endl;
         pos += 8;
     }
@@ -545,8 +572,8 @@ void UTPClient::parse_md_full_refresh_tr(const uint8_t* buffer, size_t size, uin
     std::cout << "  Market Data Entries:" << std::endl;
     size_t entry_count = 0;
     while (pos + 16 <= size && entry_count < 10) {
-        uint64_t price_raw = *reinterpret_cast<const uint64_t*>(buffer + pos);
-        uint64_t size_val = *reinterpret_cast<const uint64_t*>(buffer + pos + 8);
+        uint64_t price_raw = le64toh(*reinterpret_cast<const uint64_t*>(buffer + pos));
+        uint64_t size_val = le64toh(*reinterpret_cast<const uint64_t*>(buffer + pos + 8));
 
         if (price_raw > 0 && size_val > 0 && size_val < 1000000000) {
             double price = static_cast<double>(price_raw) / 1e9;
@@ -573,14 +600,14 @@ void UTPClient::parse_md_incremental_refresh_tr(const uint8_t* buffer, size_t si
 
     // Parse security ID
     if (pos + 4 <= size) {
-        uint32_t securityID = *reinterpret_cast<const uint32_t*>(buffer + pos);
+        uint32_t securityID = le32toh(*reinterpret_cast<const uint32_t*>(buffer + pos));
         std::cout << "  Security ID: " << securityID << std::endl;
         pos += 4;
     }
 
     // Parse sequence number
     if (pos + 8 <= size) {
-        uint64_t rptSeq = *reinterpret_cast<const uint64_t*>(buffer + pos);
+        uint64_t rptSeq = le64toh(*reinterpret_cast<const uint64_t*>(buffer + pos));
         std::cout << "  Report Sequence: " << rptSeq << std::endl;
         pos += 8;
     }
@@ -590,8 +617,8 @@ void UTPClient::parse_md_incremental_refresh_tr(const uint8_t* buffer, size_t si
     size_t entry_count = 0;
     while (pos + 17 <= size && entry_count < 5) {
         uint8_t action = buffer[pos];
-        uint64_t price_raw = *reinterpret_cast<const uint64_t*>(buffer + pos + 1);
-        uint64_t size_val = *reinterpret_cast<const uint64_t*>(buffer + pos + 9);
+        uint64_t price_raw = le64toh(*reinterpret_cast<const uint64_t*>(buffer + pos + 1));
+        uint64_t size_val = le64toh(*reinterpret_cast<const uint64_t*>(buffer + pos + 9));
 
         if (action <= 2 && price_raw > 0) {
             double price = static_cast<double>(price_raw) / 1e9;
