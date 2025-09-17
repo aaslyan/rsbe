@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -O2 -pthread
-INCLUDES = -I./include -I./include/utp_sbe
+INCLUDES = -I./include -I./include/utp_sbe -I./core/include -I.
 
 # UTP Server sources
 UTP_SERVER_SOURCES = src/reuters_server_multicast_main.cpp \
@@ -9,9 +9,9 @@ UTP_SERVER_SOURCES = src/reuters_server_multicast_main.cpp \
                     src/udp_multicast_transport.cpp \
                     src/tcp_transport.cpp \
                     src/reuters_protocol_adapter.cpp \
-                    src/market_data_generator.cpp \
-                    src/order_book.cpp \
-                    src/order_book_manager.cpp
+                    core/src/market_data_generator.cpp \
+                    core/src/order_book.cpp \
+                    core/src/order_book_manager.cpp
 
 # UTP Client sources
 UTP_CLIENT_SOURCES = utp_client/utp_client_main.cpp \

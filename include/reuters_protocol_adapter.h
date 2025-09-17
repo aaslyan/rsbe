@@ -1,7 +1,7 @@
 #pragma once
 
-#include "market_data_generator.h"
-#include "market_events.h"
+#include "../core/include/market_data_generator.h"
+#include "../core/include/market_events.h"
 #include "reuters_encoder.h"
 #include "reuters_multicast_publisher.h"
 #include "utp_sbe/utp_sbe/MessageHeader.h"

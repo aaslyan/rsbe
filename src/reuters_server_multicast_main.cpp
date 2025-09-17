@@ -1,6 +1,6 @@
-#include "../../core/include/market_data_generator.h"
-#include "../../core/include/order_book_manager.h"
-#include "../../protocols/reuters/include/reuters_protocol_adapter.h"
+#include "../core/include/market_data_generator.h"
+#include "../core/include/order_book_manager.h"
+#include "../include/reuters_protocol_adapter.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
