@@ -42,6 +42,8 @@ public:
 private:
     // Message parsing helpers
     void parse_message(const uint8_t* buffer, size_t size);
+    void parse_multicast_header(const uint8_t* buffer);
+    void parse_sbe_message(const uint8_t* buffer, size_t size);
     void parse_message_at_offset(const uint8_t* buffer, size_t size, size_t offset);
     void parse_admin_heartbeat(const uint8_t* buffer, size_t size);
     void parse_security_definition(const uint8_t* buffer, size_t size);
@@ -55,4 +57,7 @@ private:
     // Debug helpers
     void print_message_header(const UTPMessageHeader& header);
     void hex_dump(const uint8_t* data, size_t size);
+    void manual_decode_message(const uint8_t* buffer, size_t size);
+    void decode_security_definition_manual(const uint8_t* buffer, size_t size);
+    void decode_market_data_manual(const uint8_t* buffer, size_t size);
 };
