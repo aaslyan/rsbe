@@ -44,6 +44,8 @@ private:
     void parse_message(const uint8_t* buffer, size_t size);
     void parse_multicast_header(const uint8_t* buffer);
     void parse_sbe_message(const uint8_t* buffer, size_t size);
+    void parse_sbe_message_at_offset(const uint8_t* buffer, size_t size, size_t offset);
+    void decode_raw_message_content(const uint8_t* buffer, size_t size);
     void parse_message_at_offset(const uint8_t* buffer, size_t size, size_t offset);
     void parse_admin_heartbeat(const uint8_t* buffer, size_t size);
     void parse_security_definition(const uint8_t* buffer, size_t size);

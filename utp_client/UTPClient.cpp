@@ -200,44 +200,127 @@ void UTPClient::parse_sbe_message(const uint8_t* buffer, size_t size)
         return;
     }
 
+    std::cout << "Searching for SBE header in payload...\n";
+    hex_dump(buffer, std::min(size, size_t(64)));
+
+    // Search for valid template IDs in the buffer
+    bool found_header = false;
+    size_t sbe_offset = 0;
+    
+    for (size_t offset = 0; offset <= size - 8; offset += 2) {
+        // Try to read template ID as little-endian uint16
+        uint16_t template_id = *reinterpret_cast<const uint16_t*>(buffer + offset);
+        
+        if (template_id == 1 || template_id == 18 || template_id == 38 || template_id == 39 || template_id == 41) {
+            std::cout << "Found potential template ID " << template_id << " at offset " << offset << std::endl;
+            
+            // Check if there's enough space for a full SBE header
+            if (offset + 8 <= size) {
+                try {
+                    utp_sbe::MessageHeader header;
+                    header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), offset, 0, size);
+                    
+                    std::cout << "SBE Header at offset " << offset << ":\n";
+                    std::cout << "  Template ID: " << header.templateId() << std::endl;
+                    std::cout << "  Schema ID: " << header.schemaId() << std::endl;
+                    std::cout << "  Version: " << header.version() << std::endl;
+                    std::cout << "  Block Length: " << header.blockLength() << std::endl;
+                    
+                    // Validate this looks reasonable
+                    if (header.schemaId() == 1 && header.version() == 0 && header.blockLength() > 0 && header.blockLength() < 1000) {
+                        std::cout << "*** Using SBE message at offset " << offset << " ***\n";
+                        found_header = true;
+                        sbe_offset = offset;
+                        break;
+                    }
+                } catch (const std::exception& e) {
+                    // Continue searching
+                }
+            }
+        }
+    }
+
+    if (found_header) {
+        // Parse the message at the found offset
+        parse_sbe_message_at_offset(buffer, size, sbe_offset);
+    } else {
+        std::cout << "Could not find valid SBE header. Attempting raw decode...\n";
+        decode_raw_message_content(buffer, size);
+    }
+}
+
+void UTPClient::parse_sbe_message_at_offset(const uint8_t* buffer, size_t size, size_t offset)
+{
     try {
         utp_sbe::MessageHeader header;
-        header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), 0, 0, size);
-
-        std::cout << "SBE Template ID: " << header.templateId() << std::endl;
-        std::cout << "SBE Schema ID: " << header.schemaId() << std::endl;
-        std::cout << "SBE Version: " << header.version() << std::endl;
-        std::cout << "SBE Block Length: " << header.blockLength() << std::endl;
+        header.wrap(const_cast<char*>(reinterpret_cast<const char*>(buffer)), offset, 0, size);
 
         switch (header.templateId()) {
         case 1: // ADMIN_HEARTBEAT
-            parse_admin_heartbeat(buffer, size);
+            parse_admin_heartbeat(buffer + offset, size - offset);
             break;
 
         case 18: // SECURITY_DEFINITION
-            parse_security_definition(buffer, size);
+            parse_security_definition(buffer + offset, size - offset);
             break;
 
         case 39: // MD_FULL_REFRESH
-            parse_md_full_refresh(buffer, size);
+            parse_md_full_refresh(buffer + offset, size - offset);
             break;
 
         case 38: // MD_INCREMENTAL_REFRESH
-            parse_md_incremental_refresh(buffer, size);
+            parse_md_incremental_refresh(buffer + offset, size - offset);
             break;
 
         case 41: // MD_INCREMENTAL_REFRESH_TRADES
-            parse_md_incremental_refresh_trades(buffer, size);
+            parse_md_incremental_refresh_trades(buffer + offset, size - offset);
             break;
 
         default:
-            std::cout << "Unknown SBE message type: " << header.templateId() << std::endl;
-            hex_dump(buffer, std::min(size, size_t(64)));
+            std::cout << "Unsupported SBE message type: " << header.templateId() << std::endl;
             break;
         }
     } catch (const std::exception& e) {
-        std::cout << "Failed to parse SBE message: " << e.what() << std::endl;
-        hex_dump(buffer, std::min(size, size_t(32)));
+        std::cout << "Failed to parse SBE message at offset " << offset << ": " << e.what() << std::endl;
+    }
+}
+
+void UTPClient::decode_raw_message_content(const uint8_t* buffer, size_t size)
+{
+    std::cout << "\n=== Raw Message Content Analysis ===\n";
+    
+    // Look for potential numeric data that could be prices/sizes
+    for (size_t i = 0; i <= size - 8; i += 4) {
+        uint32_t val32 = *reinterpret_cast<const uint32_t*>(buffer + i);
+        uint64_t val64 = *reinterpret_cast<const uint64_t*>(buffer + i);
+        
+        // Check for potential security ID (reasonable range)
+        if (val32 > 0 && val32 < 100000) {
+            std::cout << "Potential Security ID " << val32 << " at offset " << i << std::endl;
+        }
+        
+        // Check for potential price (as fixed point)
+        if (val64 > 1000000 && val64 < 1000000000000ULL) {
+            double price = static_cast<double>(val64) / 1e9;
+            if (price > 0.001 && price < 10000.0) {
+                std::cout << "Potential Price " << price << " at offset " << i << std::endl;
+            }
+        }
+    }
+    
+    // Look for ASCII strings (symbols)
+    for (size_t i = 0; i < size - 3; i++) {
+        if (buffer[i] >= 'A' && buffer[i] <= 'Z') {
+            size_t len = 0;
+            while (i + len < size && buffer[i + len] >= 'A' && buffer[i + len] <= 'Z' && len < 16) {
+                len++;
+            }
+            if (len >= 3) {
+                std::string symbol(reinterpret_cast<const char*>(buffer + i), len);
+                std::cout << "Potential Symbol '" << symbol << "' at offset " << i << std::endl;
+                i += len - 1; // Skip ahead
+            }
+        }
     }
 }
 
