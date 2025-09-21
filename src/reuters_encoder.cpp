@@ -16,11 +16,19 @@ std::vector<uint8_t> ReutersEncoder::encode_heartbeat()
 {
     std::vector<uint8_t> buffer(1024);
 
+    // Initialize SBE message header first
+    utp_sbe::MessageHeader header;
+    header.wrap(reinterpret_cast<char*>(buffer.data()), 0, 0, buffer.size())
+        .blockLength(utp_sbe::AdminHeartbeat::SBE_BLOCK_LENGTH)
+        .templateId(utp_sbe::AdminHeartbeat::SBE_TEMPLATE_ID)
+        .schemaId(utp_sbe::AdminHeartbeat::SBE_SCHEMA_ID)
+        .version(utp_sbe::AdminHeartbeat::SBE_SCHEMA_VERSION);
+
     // UTP Admin Heartbeat is very simple - just header
     utp_sbe::AdminHeartbeat heartbeat;
-    heartbeat.wrapForEncode(reinterpret_cast<char*>(buffer.data()), 0, buffer.size());
+    heartbeat.wrapForEncode(reinterpret_cast<char*>(buffer.data()), header.encodedLength(), buffer.size());
 
-    size_t encoded_length = heartbeat.encodedLength();
+    size_t encoded_length = header.encodedLength() + heartbeat.encodedLength();
     buffer.resize(encoded_length);
     return buffer;
 }
@@ -30,8 +38,17 @@ std::vector<uint8_t> ReutersEncoder::encode_security_definition(
 {
     std::vector<uint8_t> buffer(1024);
 
+    // Initialize SBE message header first
+    utp_sbe::MessageHeader header;
+    header.wrap(reinterpret_cast<char*>(buffer.data()), 0, 0, buffer.size())
+        .blockLength(utp_sbe::SecurityDefinition::SBE_BLOCK_LENGTH)
+        .templateId(utp_sbe::SecurityDefinition::SBE_TEMPLATE_ID)
+        .schemaId(utp_sbe::SecurityDefinition::SBE_SCHEMA_ID)
+        .version(utp_sbe::SecurityDefinition::SBE_SCHEMA_VERSION);
+
+    // Initialize SecurityDefinition message after header
     utp_sbe::SecurityDefinition secDef;
-    secDef.wrapForEncode(reinterpret_cast<char*>(buffer.data()), 0, buffer.size());
+    secDef.wrapForEncode(reinterpret_cast<char*>(buffer.data()), header.encodedLength(), buffer.size());
 
     // Set basic instrument fields using the correct UTP SBE methods
     secDef.securityID(instrument.instrument_id);
@@ -42,7 +59,7 @@ std::vector<uint8_t> ReutersEncoder::encode_security_definition(
         std::chrono::system_clock::now().time_since_epoch())
                               .count());
 
-    size_t encoded_length = secDef.encodedLength();
+    size_t encoded_length = header.encodedLength() + secDef.encodedLength();
     buffer.resize(encoded_length);
     return buffer;
 }
@@ -52,8 +69,17 @@ std::vector<uint8_t> ReutersEncoder::encode_market_data_snapshot(
 {
     std::vector<uint8_t> buffer(4096);
 
+    // Initialize SBE message header first
+    utp_sbe::MessageHeader header;
+    header.wrap(reinterpret_cast<char*>(buffer.data()), 0, 0, buffer.size())
+        .blockLength(utp_sbe::MDFullRefresh::SBE_BLOCK_LENGTH)
+        .templateId(utp_sbe::MDFullRefresh::SBE_TEMPLATE_ID)
+        .schemaId(utp_sbe::MDFullRefresh::SBE_SCHEMA_ID)
+        .version(utp_sbe::MDFullRefresh::SBE_SCHEMA_VERSION);
+
+    // Initialize MDFullRefresh message after header
     utp_sbe::MDFullRefresh mdSnapshot;
-    mdSnapshot.wrapForEncode(reinterpret_cast<char*>(buffer.data()), 0, buffer.size());
+    mdSnapshot.wrapForEncode(reinterpret_cast<char*>(buffer.data()), header.encodedLength(), buffer.size());
 
     mdSnapshot.securityID(snapshot.instrument_id)
         .transactTime(snapshot.timestamp_ns)
@@ -80,7 +106,7 @@ std::vector<uint8_t> ReutersEncoder::encode_market_data_snapshot(
         // numberOfOrders not available in UTP MDFullRefresh
     }
 
-    size_t encoded_length = mdSnapshot.encodedLength();
+    size_t encoded_length = header.encodedLength() + mdSnapshot.encodedLength();
     buffer.resize(encoded_length);
     return buffer;
 }
@@ -90,8 +116,17 @@ std::vector<uint8_t> ReutersEncoder::encode_market_data_incremental(
 {
     std::vector<uint8_t> buffer(1024);
 
+    // Initialize SBE message header first
+    utp_sbe::MessageHeader header;
+    header.wrap(reinterpret_cast<char*>(buffer.data()), 0, 0, buffer.size())
+        .blockLength(utp_sbe::MDIncrementalRefresh::SBE_BLOCK_LENGTH)
+        .templateId(utp_sbe::MDIncrementalRefresh::SBE_TEMPLATE_ID)
+        .schemaId(utp_sbe::MDIncrementalRefresh::SBE_SCHEMA_ID)
+        .version(utp_sbe::MDIncrementalRefresh::SBE_SCHEMA_VERSION);
+
+    // Initialize MDIncrementalRefresh message after header
     utp_sbe::MDIncrementalRefresh mdIncremental;
-    mdIncremental.wrapForEncode(reinterpret_cast<char*>(buffer.data()), 0, buffer.size());
+    mdIncremental.wrapForEncode(reinterpret_cast<char*>(buffer.data()), header.encodedLength(), buffer.size());
 
     // Set message-level fields
     mdIncremental.securityID(quote.instrument_id)
@@ -107,7 +142,7 @@ std::vector<uint8_t> ReutersEncoder::encode_market_data_incremental(
     entry.mDEntryPx().mantissa(static_cast<int64_t>(quote.price * 1e9)); // Convert to fixed point
     entry.mDEntrySize(quote.quantity);
 
-    size_t encoded_length = mdIncremental.encodedLength();
+    size_t encoded_length = header.encodedLength() + mdIncremental.encodedLength();
     buffer.resize(encoded_length);
     return buffer;
 }
@@ -117,8 +152,17 @@ std::vector<uint8_t> ReutersEncoder::encode_market_data_incremental(
 {
     std::vector<uint8_t> buffer(1024);
 
+    // Initialize SBE message header first
+    utp_sbe::MessageHeader header;
+    header.wrap(reinterpret_cast<char*>(buffer.data()), 0, 0, buffer.size())
+        .blockLength(utp_sbe::MDIncrementalRefreshTrades::SBE_BLOCK_LENGTH)
+        .templateId(utp_sbe::MDIncrementalRefreshTrades::SBE_TEMPLATE_ID)
+        .schemaId(utp_sbe::MDIncrementalRefreshTrades::SBE_SCHEMA_ID)
+        .version(utp_sbe::MDIncrementalRefreshTrades::SBE_SCHEMA_VERSION);
+
+    // Initialize MDIncrementalRefreshTrades message after header
     utp_sbe::MDIncrementalRefreshTrades mdTrade;
-    mdTrade.wrapForEncode(reinterpret_cast<char*>(buffer.data()), 0, buffer.size());
+    mdTrade.wrapForEncode(reinterpret_cast<char*>(buffer.data()), header.encodedLength(), buffer.size());
 
     // Set message-level fields
     mdTrade.securityID(trade.instrument_id);
@@ -138,7 +182,7 @@ std::vector<uint8_t> ReutersEncoder::encode_market_data_incremental(
         entry.aggressorSide(utp_sbe::AggressorSide::NONE);
     }
 
-    size_t encoded_length = mdTrade.encodedLength();
+    size_t encoded_length = header.encodedLength() + mdTrade.encodedLength();
     buffer.resize(encoded_length);
     return buffer;
 }
