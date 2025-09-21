@@ -5,39 +5,27 @@
 
 namespace reuters_protocol {
 
-// MulticastMessageHeader implementation
+// MulticastMessageHeader implementation (deprecated - using Thomson Reuters header now)
 void MulticastMessageHeader::pack(uint8_t* buffer) const
 {
-    // Pack in network byte order (big-endian)
-    uint64_t seq_be = htobe64(sequence_number);
-    uint32_t chan_be = htonl(channel_id);
-    uint64_t time_be = htobe64(send_time_ns);
-    uint16_t count_be = htons(message_count);
-
-    memcpy(buffer, &seq_be, 8);
-    memcpy(buffer + 8, &chan_be, 4);
-    memcpy(buffer + 12, &time_be, 8);
-    memcpy(buffer + 20, &count_be, 2);
+    // Note: This method is deprecated. We now use Thomson Reuters Binary Packet Header
+    // Keeping for backward compatibility only
+    memcpy(buffer, &sequence_number, 8);
+    memcpy(buffer + 8, &channel_id, 4);
+    memcpy(buffer + 12, &send_time_ns, 8);
+    memcpy(buffer + 20, &message_count, 2);
     buffer[22] = flags;
 }
 
 void MulticastMessageHeader::unpack(const uint8_t* buffer)
 {
-    uint64_t seq_be;
-    uint32_t chan_be;
-    uint64_t time_be;
-    uint16_t count_be;
-
-    memcpy(&seq_be, buffer, 8);
-    memcpy(&chan_be, buffer + 8, 4);
-    memcpy(&time_be, buffer + 12, 8);
-    memcpy(&count_be, buffer + 20, 2);
+    // Note: This method is deprecated. We now use Thomson Reuters Binary Packet Header
+    // Keeping for backward compatibility only
+    memcpy(&sequence_number, buffer, 8);
+    memcpy(&channel_id, buffer + 8, 4);
+    memcpy(&send_time_ns, buffer + 12, 8);
+    memcpy(&message_count, buffer + 20, 2);
     flags = buffer[22];
-
-    sequence_number = be64toh(seq_be);
-    channel_id = ntohl(chan_be);
-    send_time_ns = be64toh(time_be);
-    message_count = ntohs(count_be);
 }
 
 // ReutersMulticastPublisher implementation
@@ -358,19 +346,30 @@ std::vector<uint8_t> ReutersMulticastPublisher::add_sequence_header(
     uint64_t sequence,
     int channel_id)
 {
-    MulticastMessageHeader header;
-    header.sequence_number = sequence;
-    header.channel_id = channel_id;
-    header.send_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::system_clock::now().time_since_epoch())
-                              .count();
-    header.message_count = 1;
-    header.flags = 0x00;
+    // Thomson Reuters Binary Packet Header (20 bytes) - Chapter 6.1 of spec
+    // All fields are little-endian as per Thomson Reuters specification
+    constexpr size_t TR_HEADER_SIZE = 20;
 
-    // Create packet with header + message
-    std::vector<uint8_t> packet(MulticastMessageHeader::SIZE + message.size());
-    header.pack(packet.data());
-    memcpy(packet.data() + MulticastMessageHeader::SIZE, message.data(), message.size());
+    // Create packet with TR header + SBE message
+    std::vector<uint8_t> packet(TR_HEADER_SIZE + message.size());
+
+    // Build Thomson Reuters header fields
+    uint64_t msg_seq_num = sequence;
+    uint64_t sending_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    uint8_t hdr_len = TR_HEADER_SIZE;  // Always 20
+    uint8_t hdr_ver = 1;                // Version 1
+    uint16_t packet_len = packet.size(); // Total packet length including header
+
+    // Pack header in little-endian format (Thomson Reuters uses little-endian)
+    memcpy(packet.data(), &msg_seq_num, 8);      // Offset 0: MsgSeqNum (8 bytes)
+    memcpy(packet.data() + 8, &sending_time, 8); // Offset 8: SendingTime (8 bytes)
+    packet[16] = hdr_len;                         // Offset 16: HdrLen (1 byte)
+    packet[17] = hdr_ver;                         // Offset 17: HdrVer (1 byte)
+    memcpy(packet.data() + 18, &packet_len, 2);  // Offset 18: PacketLen (2 bytes)
+
+    // Copy SBE message after header
+    memcpy(packet.data() + TR_HEADER_SIZE, message.data(), message.size());
 
     return packet;
 }
