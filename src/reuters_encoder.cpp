@@ -51,13 +51,16 @@ std::vector<uint8_t> ReutersEncoder::encode_security_definition(
     secDef.wrapForEncode(reinterpret_cast<char*>(buffer.data()), header.encodedLength(), buffer.size());
 
     // Set basic instrument fields using the correct UTP SBE methods
+    // SecurityUpdateAction is REQUIRED as the first field (offset 0)
+    secDef.securityUpdateAction(utp_sbe::SecurityUpdateAction::Value::ADD);  // 'A' for new instruments
+    secDef.lastUpdateTime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch())
+                              .count());
+    // applID is set automatically by the schema
     secDef.securityID(instrument.instrument_id);
     secDef.putSymbol(instrument.primary_symbol);
     secDef.putCurrency1("USD");
     secDef.putCurrency2("EUR");
-    secDef.lastUpdateTime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::system_clock::now().time_since_epoch())
-                              .count());
 
     size_t encoded_length = header.encodedLength() + secDef.encodedLength();
     buffer.resize(encoded_length);
