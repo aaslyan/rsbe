@@ -204,6 +204,13 @@ int main(int argc, char* argv[])
             return 1;
         }
 
+        // Send initial security definitions
+        std::vector<market_core::Instrument> instruments;
+        for (const auto& instrument_ptr : book_manager->get_all_instruments()) {
+            instruments.push_back(*instrument_ptr);
+        }
+        reuters_shared->send_security_definitions(instruments);
+
         std::cout << "\n=== Reuters Multicast Configuration ===" << std::endl;
         std::cout << "TCP Session Management: port " << tcp_port << std::endl;
         std::cout << "\nMulticast Feeds:" << std::endl;

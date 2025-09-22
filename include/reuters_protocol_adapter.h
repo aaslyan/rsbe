@@ -88,6 +88,7 @@ private:
     Statistics stats_;
     ReutersMulticastConfig multicast_config_;
     std::unique_ptr<ReutersMulticastPublisher> multicast_publisher_;
+    std::unique_ptr<std::vector<market_core::Instrument>> instruments_;
 };
 
 } // namespace reuters_protocol

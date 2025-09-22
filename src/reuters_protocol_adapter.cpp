@@ -46,11 +46,22 @@ void ReutersProtocolAdapter::run_once()
 
     // Send multicast heartbeats if needed
     static auto last_heartbeat = std::chrono::steady_clock::now();
+    static auto last_security_definitions = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
+
     if (std::chrono::duration_cast<std::chrono::seconds>(now - last_heartbeat).count() >= 30) {
         if (multicast_publisher_) {
             multicast_publisher_->send_heartbeat();
             last_heartbeat = now;
+        }
+    }
+
+    // Send security definitions every 10 seconds for late-joining clients
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - last_security_definitions).count() >= 10) {
+        if (multicast_publisher_ && instruments_) {
+            std::cout << "Sending periodic security definitions..." << std::endl;
+            send_security_definitions(*instruments_);
+            last_security_definitions = now;
         }
     }
 }
@@ -111,6 +122,12 @@ void ReutersProtocolAdapter::send_security_definitions(
 {
     if (!running_ || !multicast_publisher_)
         return;
+
+    // Store instruments for periodic sending
+    if (!instruments_) {
+        instruments_ = std::make_unique<std::vector<market_core::Instrument>>(instruments);
+        std::cout << "Storing " << instruments.size() << " instruments for periodic security definition updates" << std::endl;
+    }
 
     std::cout << "Sending security definitions for " << instruments.size() << " instruments via UTP multicast" << std::endl;
 
