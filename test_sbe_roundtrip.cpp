@@ -82,19 +82,19 @@ void test_security_definition_roundtrip()
     uint16_t version = *reinterpret_cast<const uint16_t*>(sbe_data + 6);
 
     std::cout << "  Block Length: " << block_length << std::endl;
-    std::cout << "  Template ID: " << template_id << " (expected: 12 for SecurityDefinition)" << std::endl;
+    std::cout << "  Template ID: " << template_id << " (expected: 18 for SecurityDefinition)" << std::endl;
     std::cout << "  Schema ID: " << schema_id << std::endl;
     std::cout << "  Version: " << version << std::endl;
 
     // Decode the SecurityDefinition using SBE
-    if (template_id == 12) {
+    if (template_id == 18) {
         std::cout << "🔍 Decoding SecurityDefinition using SBE..." << std::endl;
 
         try {
             utp_sbe::SecurityDefinition secDef;
+            // SecurityDefinition data starts immediately after the 8-byte SBE header
             secDef.wrapForDecode(const_cast<char*>(reinterpret_cast<const char*>(sbe_data)),
-                0, sizeof(utp_sbe::MessageHeader),
-                sizeof(utp_sbe::MessageHeader), sbe_size);
+                8, block_length, version, sbe_size);
 
             std::cout << "✅ SBE decoding successful!" << std::endl;
             std::cout << "  Security ID: " << secDef.securityID() << " (expected: 1001)" << std::endl;
